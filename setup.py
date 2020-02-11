@@ -13,7 +13,8 @@ install_requires = [
     'publicationstatsapi>=1.2.1',
     'accessstatsapi>=1.2.1',
     'citedbyapi>=1.11.3',
-    'legendarium>=2.0.2'
+    'legendarium>=2.0.2',
+    'tqdm',
 ]
 
 tests_require = []
