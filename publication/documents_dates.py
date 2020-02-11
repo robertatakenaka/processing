@@ -11,7 +11,7 @@ import csv
 import utils
 import choices
 
-from amdump.articlemeta import dump_json
+from amdump.articlemeta import dump_json, documents
 
 
 logger = logging.getLogger(__name__)
@@ -168,32 +168,25 @@ class Dumper(object):
             for row in rows:
                 writer.writerow(row)
 
-    @property
-    def _rows(self):
-        for issn in self.issns or []:
-            for document in self._articlemeta.documents(
-                    collection=self.collection, issn=issn):
-                logger.debug('Reading document: %s' % document.publisher_id)
-                yield self.get_row_data(document)
-
-    @property
-    def rows(self):
-        json_path = dump_json(self.collection)
-        for f in os.listdir(json_path):
-            file_path = os.path.join(json_path, f)
-            with open(file_path, "r") as fp:
-                content = fp.read()
-                document = Article(content)
-            for document in self._articlemeta.documents(
-                    collection=self.collection, issn=issn):
-                logger.debug('Reading document: %s' % document.publisher_id)
-                yield self.get_row_data(document)
+    def rows(self, json_path):
+        for document in documents(json_path):
+            logger.debug('Reading document: %s' % document.publisher_id)
+            yield self.get_row_data(document)
 
     def run(self):
-        json_path = dump_json(self.collection)
-        for 
-        self.create_csv_file(self.rows)
-        logger.info('Export finished')
+        try:
+            json_path = dump_json(self.collection)
+        except IOError as e:
+            logger.exception("Falha em dump_json: %s" % e)
+        except KeyboardInterrupt:
+            pass
+        except UnicodeError as e:
+            logger.exception("Falha em dump_json: %s" % e)
+        except Exception as e:
+            logger.exception("Falha em dump_json: %s" % e)
+        else:
+            self.create_csv_file(self.rows(json_path))
+            logger.info('Export finished')
 
 
 def main():
