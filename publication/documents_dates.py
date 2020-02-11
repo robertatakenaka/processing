@@ -11,6 +11,9 @@ import csv
 import utils
 import choices
 
+from amdump.articlemeta import dump_json
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +44,7 @@ def _config_logging(logging_level='INFO', logging_file=None):
     return logger
 
 
-class NewDumper(object):
+class Dumper(object):
 
     def __init__(self, collection, issns=None, output_file=None):
         self.csv_file = output_file or "documents_data.csv"
@@ -166,14 +169,29 @@ class NewDumper(object):
                 writer.writerow(row)
 
     @property
-    def rows(self):
+    def _rows(self):
         for issn in self.issns or []:
             for document in self._articlemeta.documents(
                     collection=self.collection, issn=issn):
                 logger.debug('Reading document: %s' % document.publisher_id)
                 yield self.get_row_data(document)
 
+    @property
+    def rows(self):
+        json_path = dump_json(self.collection)
+        for f in os.listdir(json_path):
+            file_path = os.path.join(json_path, f)
+            with open(file_path, "r") as fp:
+                content = fp.read()
+                document = Article(content)
+            for document in self._articlemeta.documents(
+                    collection=self.collection, issn=issn):
+                logger.debug('Reading document: %s' % document.publisher_id)
+                yield self.get_row_data(document)
+
     def run(self):
+        json_path = dump_json(self.collection)
+        for 
         self.create_csv_file(self.rows)
         logger.info('Export finished')
 
@@ -224,6 +242,6 @@ def main():
     if len(args.issns) > 0:
         issns = utils.ckeck_given_issns(args.issns)
 
-    dumper = NewDumper(args.collection, issns, args.output_file)
+    dumper = Dumper(args.collection, issns, args.output_file)
 
     dumper.run()

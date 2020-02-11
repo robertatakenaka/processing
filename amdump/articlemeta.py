@@ -8,6 +8,9 @@ from tqdm import tqdm
 
 from . import http
 
+from xylose.scielodocument import Article
+
+
 LOGGER = logging.getLogger(__name__)
 
 XML_URL = "http://articlemeta.scielo.org/api/v1/article/?collection={col}&code={pid}&format={fmt}"
@@ -202,7 +205,16 @@ def dump_json(collection):
             dumped_data_dir, pids_file,
             pbar=dummy_tqdm, concurrency=2,
             fmt='json', extension='.json', overwrite=False, preservenull=True)
-    return dumped_data_dir
 
     with open(last_filepath, "w") as last_file:
         last_file.write(DEFAULT_FROM_DATE)
+    return dumped_data_dir
+
+
+def documents(json_path):
+    for f in os.listdir(json_path):
+        file_path = os.path.join(json_path, f)
+        with open(file_path, "r") as fp:
+            content = fp.read()
+            document = Article(content)
+            yield document
