@@ -7,7 +7,7 @@ import argparse
 import logging
 import codecs
 import datetime
-
+import csv
 import utils
 import choices
 
@@ -300,6 +300,14 @@ class NewDumper(object):
             row[label + " month"] = splitted_date[1]
             row[label + " day"] = splitted_date[2]
         return row
+
+    def create_csv_file(self, documents_data):
+        with open(self.csv_file, 'w', newline="") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=self.header)
+            writer.writeheader()
+            for document_data in documents_data:
+                writer.writerow(self.get_row_data(document_data))
+
 
 def main():
 
