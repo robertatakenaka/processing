@@ -193,6 +193,60 @@ class NewDumper(object):
         self.collection = collection
         self.issns = issns
 
+    @property
+    def header(self):
+        return [
+            "extraction date",
+            "study unit",
+            "collection",
+            "ISSN SciELO",
+            "ISSN's",
+            "title at SciELO",
+            "title thematic areas",
+            "title is agricultural sciences",
+            "title is applied social sciences",
+            "title is biological sciences",
+            "title is engineering",
+            "title is exact and earth sciences",
+            "title is health sciences",
+            "title is human sciences",
+            "title is linguistics, letters and arts",
+            "title is multidisciplinary",
+            "title current status",
+            "document publishing ID (PID SciELO)",
+            "document publishing year",
+            "document type",
+            "document is citable",
+            "document submitted at",
+            "document submitted at year",
+            "document submitted at month",
+            "document submitted at day",
+            "document accepted at",
+            "document accepted at year",
+            "document accepted at month",
+            "document accepted at day",
+            "document reviewed at",
+            "document reviewed at year",
+            "document reviewed at month",
+            "document reviewed at day",
+            "document published as ahead of print at",
+            "document published as ahead of print at year",
+            "document published as ahead of print at month",
+            "document published as ahead of print at day",
+            "document published at",
+            "document published at year",
+            "document published at month",
+            "document published at day",
+            "document published in SciELO at",
+            "document published in SciELO at year",
+            "document published in SciELO at month",
+            "document published in SciELO at day",
+            "document updated in SciELO at",
+            "document updated in SciELO at year",
+            "document updated in SciELO at month",
+            "document updated in SciELO at day"
+        ]
+
 
 def main():
 
