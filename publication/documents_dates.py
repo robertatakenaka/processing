@@ -301,12 +301,24 @@ class NewDumper(object):
             row[label + " day"] = splitted_date[2]
         return row
 
-    def create_csv_file(self, documents_data):
+    def create_csv_file(self, rows):
         with open(self.csv_file, 'w', newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=self.header)
             writer.writeheader()
-            for document_data in documents_data:
-                writer.writerow(self.get_row_data(document_data))
+            for row in rows:
+                writer.writerow(self.get_row_data(row))
+
+    @property
+    def rows(self):
+        for issn in self.issns or []:
+            for document in self._articlemeta.documents(
+                    collection=self.collection, issn=issn):
+                logger.debug('Reading document: %s' % document.publisher_id)
+                yield self.get_row_data(document)
+
+    def run(self):
+        self.create_csv_file(self.rows)
+        logger.info('Export finished')
 
 
 def main():
@@ -355,6 +367,6 @@ def main():
     if len(args.issns) > 0:
         issns = utils.ckeck_given_issns(args.issns)
 
-    dumper = Dumper(args.collection, issns, args.output_file)
+    dumper = NewDumper(args.collection, issns, args.output_file)
 
     dumper.run()
