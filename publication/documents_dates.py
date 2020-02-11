@@ -163,7 +163,7 @@ class NewDumper(object):
             writer = csv.DictWriter(csvfile, fieldnames=self.header)
             writer.writeheader()
             for row in rows:
-                writer.writerow(self.get_row_data(row))
+                writer.writerow(row)
 
     @property
     def rows(self):
