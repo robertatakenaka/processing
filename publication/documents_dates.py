@@ -184,6 +184,16 @@ class Dumper(object):
         return joined_line
 
 
+class NewDumper(object):
+
+    def __init__(self, collection, issns=None, output_file=None):
+        self.csv_file = output_file or "documents_data.csv"
+        self._ratchet = utils.ratchet_server()
+        self._articlemeta = utils.articlemeta_server()
+        self.collection = collection
+        self.issns = issns
+
+
 def main():
 
     parser = argparse.ArgumentParser(
