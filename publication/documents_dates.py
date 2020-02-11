@@ -247,6 +247,59 @@ class NewDumper(object):
             "document updated in SciELO at day"
         ]
 
+    def get_row_data(self, data):
+        SUBJ_AREAS = [
+            i.lower()
+            for i in choices.THEMATIC_AREAS or []]
+        J_SUBJ_AREAS = [
+            i.lower()
+            for i in data.journal.subject_areas or []]
+
+        def get_flag(self, condition):
+            return "1" if condition else "0"
+
+        row = {}
+        row["extraction date"] = datetime.datetime.now().isoformat()[0:10]
+        row["study unit"] = u'document'
+        row["collection"] = data.collection_acronym
+        row["ISSN SciELO"] = data.journal.scielo_issn
+        issns = [
+            issn
+            for issn in [data.journal.print_issn, data.journal.electronic_issn]
+            if issn
+        ]
+        row["ISSN's"] = u';'.join(issns)
+        row["title at SciELO"] = data.journal.title
+        row["title thematic areas"] = u';'.join(
+            data.journal.subject_areas or [])
+
+        for area in SUBJ_AREAS:
+            row["title is {}".format(area)] = get_flag(area in J_SUBJ_AREAS)
+        row["title is multidisciplinary"] = get_flag(
+            len(data.journal.subject_areas or []) > 2)
+        row["title current status"] = data.journal.current_status
+        row["document publishing ID (PID SciELO)"] = data.publisher_id
+        row["document publishing year"] = data.publication_date[0:4]
+        row["document type"] = data.document_type
+        row["document is citable"] = get_flag(
+            data.document_type.lower() in choices.CITABLE_DOCUMENT_TYPES)
+
+        dates = [
+            ("document submitted at", data.receive_date),
+            ("document accepted at", data.acceptance_date),
+            ("document reviewed at", data.review_date),
+            ("document published as ahead of print at", data.ahead_publication_date),
+            ("document published at", data.publication_date),
+            ("document published in SciELO at", data.creation_date),
+            ("document updated in SciELO at", data.update_date),
+        ]
+        for label, data_date in dates:
+            row[label] = data_date or ''
+            splitted_date = utils.split_date(row[label])
+            row[label + " year"] = splitted_date[0]
+            row[label + " month"] = splitted_date[1]
+            row[label + " day"] = splitted_date[2]
+        return row
 
 def main():
 
