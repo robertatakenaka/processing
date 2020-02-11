@@ -13,7 +13,10 @@ LOGGER = logging.getLogger(__name__)
 XML_URL = "http://articlemeta.scielo.org/api/v1/article/?collection={col}&code={pid}&format={fmt}"
 COLLECTIONS_URL = "http://articlemeta.scielo.org/api/v1/collection/identifiers/"
 ARTICLE_IDENTIFIERS_URL = "http://articlemeta.scielo.org/api/v1/article/identifiers/?collection={col}&from={from_dt}&limit={limit}&offset={offset}"
-# XML_URL.format(col=collection, pid=pid, fmt=fmt)
+
+INITIAL_DATE = "1900-01-01"
+DEFAULT_FROM_DATE = (datetime.now() - timedelta(days=60)).isoformat()[:10]
+DEFAULT_WORKING_DIR = os.path.join(os.path.expanduser("~"), ".scielo-dumps")
 
 
 class PoisonPill:
@@ -176,3 +179,30 @@ def new_pids(pid_filepath, from_date, collection=None):
     conteudo = "\n".join(pids)
     with open(pid_filepath, "w") as fp:
         fp.write(conteudo)
+
+
+def dump_json(collection):
+    from_date = INITIAL_DATE
+    workdir = os.path.join(DEFAULT_WORKING_DIR, "json", collection)
+    dumped_data_dir = os.path.join(workdir, "data")
+    pids_filepath = os.path.join(workdir, "pids.txt")
+    last_filepath = os.path.join(workdir, "lastdate.txt")
+
+    if not os.path.dirname(dumped_data_dir):
+        os.makedirs(dumped_data_dir)
+
+    if os.path.isfile(last_filepath):
+        with open(last_filepath, "r") as last_file:
+            from_date = last_file.read()
+
+    new_pids(pids_filepath, from_date, collection)
+
+    with open(pids_filepath, "r") as pids_file:
+        dump(
+            dumped_data_dir, pids_file,
+            pbar=dummy_tqdm, concurrency=2,
+            fmt='json', extension='.json', overwrite=False, preservenull=True)
+    return dumped_data_dir
+
+    with open(last_filepath, "w") as last_file:
+        last_file.write(DEFAULT_FROM_DATE)
