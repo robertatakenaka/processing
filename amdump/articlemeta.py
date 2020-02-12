@@ -13,7 +13,7 @@ from xylose.scielodocument import Article
 
 LOGGER = logging.getLogger(__name__)
 
-XML_URL = "http://articlemeta.scielo.org/api/v1/article/?collection={col}&code={pid}&format={fmt}"
+DOC_DATA_URL = "http://articlemeta.scielo.org/api/v1/article/?collection={col}&code={pid}&format={fmt}"
 COLLECTIONS_URL = "http://articlemeta.scielo.org/api/v1/collection/identifiers/"
 ARTICLE_IDENTIFIERS_URL = "http://articlemeta.scielo.org/api/v1/article/identifiers/?collection={col}&from={from_dt}&limit={limit}&offset={offset}"
 
@@ -84,7 +84,8 @@ class dummy_tqdm:
         return
 
 
-def dump(workingdir, pids_file, pbar=dummy_tqdm, concurrency=2, fmt='json', extension='.json', overwrite=False, preservenull=True):
+def dump(workingdir, pids_file, pbar=dummy_tqdm, concurrency=2, fmt='json',
+         extension='.json', overwrite=False, preservenull=True):
     pill = PoisonPill()
 
     with concurrent.futures.ThreadPoolExecutor(
@@ -96,11 +97,12 @@ def dump(workingdir, pids_file, pbar=dummy_tqdm, concurrency=2, fmt='json', exte
             flush=True,
         )
         try:
-            LOGGER.debug('started a thread pool of size "%s"', executor._max_workers)
+            LOGGER.debug(
+                'started a thread pool of size "%s"', executor._max_workers)
             future_to_file = {
                 executor.submit(
                     download_doc,
-                    XML_URL.format(col=collection, pid=pid, fmt=fmt),
+                    DOC_DATA_URL.format(col=collection, pid=pid, fmt=fmt),
                     dest,
                     pill,
                     overwrite=overwrite,
@@ -164,57 +166,86 @@ def iter_docs(col, from_dt):
         if not len(content.get("objects", [])):
             return
         for doc in content.get("objects", []):
-            yield col, doc["code"]
+            yield col, doc["code"], doc["processing_date"]
 
         offset += limit
 
 
-def new_pids(pid_filepath, from_date, collection=None):
-    LOGGER.info('fetching documents published after "%s"', from_date)
-    if collection:
-        collections = [collection]
-    else:
-        collections = eligible_collections()
-    pids = []
-    for col in collections:
-        for doc in iter_docs(col, from_date):
-            pids.append(doc[0] + " " + doc[1])
-    conteudo = "\n".join(pids)
-    with open(pid_filepath, "w") as fp:
-        fp.write(conteudo)
+class Dumper:
 
+    def __init__(self, workdir, collection, pbar=dummy_tqdm, concurrency=2,
+                 fmt='json', extension='.json',
+                 overwrite=False, preservenull=True):
+        self.workdir = workdir or DEFAULT_WORKING_DIR
+        self.collection = collection
+        self.pbar = pbar
+        self.concurrency = concurrency
+        self.overwrite = overwrite
+        self.preservenull = preservenull
+        self._pids_filepath = None
+        self._self.dates = []
+        self._new_pids = []
 
-def dump_json(collection):
-    from_date = INITIAL_DATE
-    workdir = os.path.join(DEFAULT_WORKING_DIR, "json", collection)
-    dumped_data_dir = os.path.join(workdir, "data")
-    pids_filepath = os.path.join(workdir, "pids.txt")
-    last_filepath = os.path.join(workdir, "lastdate.txt")
+    def dump_json(self):
+        with open(self.pids_filepath, "r") as pids_file:
+            dump(
+                self.json_workdir, pids_file,
+                pbar=self.pbar, concurrency=self.concurrency,
+                fmt='json', extension='.json',
+                overwrite=self.overwrite, preservenull=self.preservenull)
 
-    if not os.path.dirname(dumped_data_dir):
-        os.makedirs(dumped_data_dir)
+        with open(self.last_filepath, "w") as last_file:
+            last_file.write(DEFAULT_FROM_DATE)
 
-    if os.path.isfile(last_filepath):
-        with open(last_filepath, "r") as last_file:
-            from_date = last_file.read()
+    @property
+    def json_workdir(self):
+        return os.path.join(DEFAULT_WORKING_DIR, "json", self.collection)
 
-    new_pids(pids_filepath, from_date, collection)
+    @property
+    def json_files_path(self):
+        return os.path.join(self.json_workdir, "data")
 
-    with open(pids_filepath, "r") as pids_file:
-        dump(
-            dumped_data_dir, pids_file,
-            pbar=dummy_tqdm, concurrency=2,
-            fmt='json', extension='.json', overwrite=False, preservenull=True)
+    @property
+    def pids_filepath(self):
+        return self._pids_filepath
 
-    with open(last_filepath, "w") as last_file:
-        last_file.write(DEFAULT_FROM_DATE)
-    return dumped_data_dir
+    @pids_filepath.setter
+    def pids_filepath(self, name):
+        name = "pid_{}_{}.txt".format(name, datetime.now().isoformat()[:10])
+        self._pids_filepath = os.path.join(self.json_workdir, name)
 
+    @property
+    def last_filepath(self):
+        return os.path.join(self.json_workdir, "lastdate.txt")
 
-def documents(json_path):
-    for f in os.listdir(json_path):
-        file_path = os.path.join(json_path, f)
-        with open(file_path, "r") as fp:
-            content = fp.read()
-            document = Article(content)
-            yield document
+    @property
+    def dates_filepath(self):
+        return os.path.join(self.json_workdir, "dates.txt")
+
+    @property
+    def from_date(self):
+        if os.path.isfile(self.last_filepath):
+            with open(self.last_filepath, "r") as last_file:
+                return last_file.read()
+        return INITIAL_DATE
+
+    def get_pids(self):
+        LOGGER.info('fetching PIDs published after "%s"', self.from_date)
+        for doc in iter_docs(self.collection, self.from_date):
+            self._dates.append(doc[2])
+            yield doc[0] + " " + doc[1]
+
+    def download_pids(self):
+        with open(self.pid_filepath, "w") as fp:
+            fp.write("\n".join(self.get_pids()))
+        with open(self.dates_filepath, "w") as fp:
+            fp.write("\n".join(self._dates))
+
+    @property
+    def documents(self):
+        for f in os.listdir(self.json_files_path):
+            file_path = os.path.join(self.json_files_path, f)
+            with open(file_path, "r") as fp:
+                content = fp.read()
+                document = Article(content)
+                yield document
