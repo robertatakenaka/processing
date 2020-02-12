@@ -8,7 +8,7 @@ install_requires = [
     'lxml>=3.4.4',
     'doaj_client',
     'scieloh5m5>=1.11.0',
-    'xylose>=1.31.0',
+    'xylose',
     'articlemetaapi>=1.24.0',
     'publicationstatsapi>=1.2.1',
     'accessstatsapi>=1.2.1',
@@ -21,7 +21,7 @@ tests_require = []
 
 setup(
     name="processing",
-    version="1.32.2",
+    version="1.32.3",
     description="SciELO processing modules for analytics, access statistics, etc",
     author="SciELO",
     author_email="scielo-dev@googlegroups.com",
@@ -35,7 +35,10 @@ setup(
         "Programming Language :: Python :: 2.7",
     ],
     dependency_links=[
-        "git+https://github.com/fabiobatalha/doaj_client@0.2#egg=doaj_client"
+        "git+https://github.com/fabiobatalha/doaj_client@0.2#egg=doaj_client",
+        "git+https://github.com/scieloorg/xylose@1.35.8#egg=xylose",
+        "git+https://github.com/scieloorg/processing@1.32.3#egg=processing",
+
     ],
     tests_require=tests_require,
     test_suite='tests',

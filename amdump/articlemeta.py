@@ -3,6 +3,7 @@ import sys
 import json
 import logging
 import concurrent.futures
+from datetime import datetime, timedelta
 
 from tqdm import tqdm
 
@@ -17,9 +18,12 @@ DOC_DATA_URL = "http://articlemeta.scielo.org/api/v1/article/?collection={col}&c
 COLLECTIONS_URL = "http://articlemeta.scielo.org/api/v1/collection/identifiers/"
 ARTICLE_IDENTIFIERS_URL = "http://articlemeta.scielo.org/api/v1/article/identifiers/?collection={col}&from={from_dt}&limit={limit}&offset={offset}"
 
-INITIAL_DATE = "1900-01-01"
-DEFAULT_FROM_DATE = (datetime.now() - timedelta(days=60)).isoformat()[:10]
-DEFAULT_WORKING_DIR = os.path.join(os.path.expanduser("~"), ".scielo-dumps")
+FIRST_PUBLICATION_DATE = "1900-01-01"
+DEFAULT_WORKING_DIR = os.path.join(os.path.expanduser("~"), "scielo-dumps")
+
+
+def default_resume_date(from_date=datetime.now(), days=20):
+    return (from_date - timedelta(days=days)).isoformat()[:10]
 
 
 class PoisonPill:
@@ -53,18 +57,17 @@ def download_doc(
         dest_file.write(content)
 
 
-def splitted_lines(pids_file, fmt, working_dir, extension=".xml"):
-    for line in pids_file:
-        if len(line.strip()) == 0:
+def get_pid_and_dest(pids_file, collection, working_dir, extension=".xml"):
+    for pid in pids_file:
+        pid = pid.strip()
+        if not pid:
             continue
-        collection, pid = line.strip().split()
-        dest = os.path.join(
-            working_dir, fmt, collection, pid[1:10], pid + extension)
-        yield collection, pid, dest
+        dest = os.path.join(working_dir, pid + extension)
+        yield pid, dest
 
 
 class dummy_tqdm:
-    """Provê a interface do `tqdm` mas sem qualquer comportamento. É utilizado 
+    """Provê a interface do `tqdm` mas sem qualquer comportamento. É utilizado
     para suprimir a exibição da barra de progresso.
     """
 
@@ -84,8 +87,8 @@ class dummy_tqdm:
         return
 
 
-def dump(workingdir, pids_file, pbar=dummy_tqdm, concurrency=2, fmt='json',
-         extension='.json', overwrite=False, preservenull=True):
+def dump(collection, dest_dir, pids_file, progress_bar=dummy_tqdm, concurrency=2,
+         fmt='json', extension='.json', overwrite=False, preservenull=True):
     pill = PoisonPill()
 
     with concurrent.futures.ThreadPoolExecutor(
@@ -108,13 +111,14 @@ def dump(workingdir, pids_file, pbar=dummy_tqdm, concurrency=2, fmt='json',
                     overwrite=overwrite,
                     preserve_null=preservenull,
                 ): dest
-                for collection, pid, dest in progress_bar(
-                    splitted_lines(pids_file, fmt, workingdir, extension)
+                for pid, dest in progress_bar(
+                    get_pid_and_dest(
+                        pids_file, collection, dest_dir, extension)
                 )
             }
             print("Done.", file=sys.stderr, flush=True)
             print(
-                'Downloading files to "%s".' % workingdir,
+                'Downloading files to "%s".' % dest_dir,
                 file=sys.stderr,
                 flush=True,
             )
@@ -166,53 +170,58 @@ def iter_docs(col, from_dt):
         if not len(content.get("objects", [])):
             return
         for doc in content.get("objects", []):
-            yield col, doc["code"], doc["processing_date"]
+            yield doc["code"], doc["processing_date"]
 
         offset += limit
 
 
 class Dumper:
 
-    def __init__(self, workdir, collection, pbar=dummy_tqdm, concurrency=2,
+    def __init__(self, collection, from_date,
+                 workdir=None,
+                 pbar=dummy_tqdm, concurrency=2,
                  fmt='json', extension='.json',
                  overwrite=False, preservenull=True):
         self.workdir = workdir or DEFAULT_WORKING_DIR
         self.collection = collection
+        self.default_from_date = from_date
         self.pbar = pbar
         self.concurrency = concurrency
         self.overwrite = overwrite
         self.preservenull = preservenull
-        self._pids_filepath = None
-        self._self.dates = []
+        self._dates = []
         self._new_pids = []
 
     def dump_json(self):
         with open(self.pids_filepath, "r") as pids_file:
             dump(
-                self.json_workdir, pids_file,
-                pbar=self.pbar, concurrency=self.concurrency,
+                self.collection, self.json_files_path, pids_file,
+                progress_bar=self.pbar, concurrency=self.concurrency,
                 fmt='json', extension='.json',
                 overwrite=self.overwrite, preservenull=self.preservenull)
 
         with open(self.last_filepath, "w") as last_file:
-            last_file.write(DEFAULT_FROM_DATE)
+            last_file.write(self._dates[-1])
 
     @property
     def json_workdir(self):
-        return os.path.join(DEFAULT_WORKING_DIR, "json", self.collection)
+        path = os.path.join(self.workdir, "json", self.collection)
+        if not os.path.isdir(path):
+            os.makedirs(path)
+        return path
 
     @property
     def json_files_path(self):
-        return os.path.join(self.json_workdir, "data")
+        path = os.path.join(self.json_workdir, "data")
+        if not os.path.isdir(path):
+            os.makedirs(path)
+        return path
 
     @property
     def pids_filepath(self):
-        return self._pids_filepath
-
-    @pids_filepath.setter
-    def pids_filepath(self, name):
-        name = "pid_{}_{}.txt".format(name, datetime.now().isoformat()[:10])
-        self._pids_filepath = os.path.join(self.json_workdir, name)
+        name = "pids_{}_{}.txt".format(
+            self.from_date, datetime.now().isoformat()[:10])
+        return os.path.join(self.json_workdir, name)
 
     @property
     def last_filepath(self):
@@ -227,17 +236,17 @@ class Dumper:
         if os.path.isfile(self.last_filepath):
             with open(self.last_filepath, "r") as last_file:
                 return last_file.read()
-        return INITIAL_DATE
+        return self.default_from_date
 
-    def get_pids(self):
+    def _download_pids(self):
         LOGGER.info('fetching PIDs published after "%s"', self.from_date)
         for doc in iter_docs(self.collection, self.from_date):
-            self._dates.append(doc[2])
-            yield doc[0] + " " + doc[1]
+            self._dates.append(doc[1])
+            yield doc[0].strip()
 
     def download_pids(self):
-        with open(self.pid_filepath, "w") as fp:
-            fp.write("\n".join(self.get_pids()))
+        with open(self.pids_filepath, "w") as fp:
+            fp.write("\n".join(self._download_pids()))
         with open(self.dates_filepath, "w") as fp:
             fp.write("\n".join(self._dates))
 
@@ -247,5 +256,5 @@ class Dumper:
             file_path = os.path.join(self.json_files_path, f)
             with open(file_path, "r") as fp:
                 content = fp.read()
-                document = Article(content)
+                document = Article(json.loads(content))
                 yield document

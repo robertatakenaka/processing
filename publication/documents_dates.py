@@ -5,13 +5,13 @@ Este processamento gera uma tabulação de datas do artigo (publicação, submis
 """
 import argparse
 import logging
-import codecs
 import datetime
 import csv
 import utils
 import choices
 
-from amdump.articlemeta import dump_json, documents
+from amdump.articlemeta import Dumper as AM_Dumper
+from amdump.articlemeta import default_resume_date
 
 
 logger = logging.getLogger(__name__)
@@ -48,10 +48,9 @@ class Dumper(object):
 
     def __init__(self, collection, issns=None, output_file=None):
         self.csv_file = output_file or "documents_data.csv"
-        self._ratchet = utils.ratchet_server()
-        self._articlemeta = utils.articlemeta_server()
         self.collection = collection
         self.issns = issns
+        self.am_dumper = AM_Dumper(collection, default_resume_date())
 
     @property
     def header(self):
@@ -115,7 +114,7 @@ class Dumper(object):
             i.lower()
             for i in data.journal.subject_areas or []]
 
-        def get_flag(self, condition):
+        def get_flag(condition):
             return "1" if condition else "0"
 
         row = {}
@@ -168,14 +167,21 @@ class Dumper(object):
             for row in rows:
                 writer.writerow(row)
 
-    def rows(self, json_path):
-        for document in documents(json_path):
-            logger.debug('Reading document: %s' % document.publisher_id)
-            yield self.get_row_data(document)
+    @property
+    def rows(self):
+        for document in self.am_dumper.documents:
+            try:
+                logger.debug('Reading document: %s' % document.publisher_id)
+            except TypeError:
+                print(document.data)
+                raise
+            else:
+                yield self.get_row_data(document)
 
     def run(self):
         try:
-            json_path = dump_json(self.collection)
+            self.am_dumper.download_pids()
+            self.am_dumper.dump_json()
         except IOError as e:
             logger.exception("Falha em dump_json: %s" % e)
         except KeyboardInterrupt:
@@ -185,7 +191,7 @@ class Dumper(object):
         except Exception as e:
             logger.exception("Falha em dump_json: %s" % e)
         else:
-            self.create_csv_file(self.rows(json_path))
+            self.create_csv_file(self.rows)
             logger.info('Export finished')
 
 
